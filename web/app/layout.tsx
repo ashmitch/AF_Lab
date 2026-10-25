@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Barlow } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const siteFont = Barlow({
@@ -16,7 +17,19 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${siteFont.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <Script id="google-analytics-init" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+function gtag(){window.dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-E4900NPM44');`}
+        </Script>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-E4900NPM44"
+          strategy="afterInteractive"
+        />
+      </body>
     </html>
   );
 }
