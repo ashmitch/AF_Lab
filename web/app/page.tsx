@@ -537,7 +537,6 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-7 sm:py-8 lg:px-10">
-        <AdSlot placement="leaderboard" className="mb-6" />
         <section id="statistics" className="grid gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
           <aside className="self-start rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-28">
             <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#c18d00]">AF_Lab / Data</p>
@@ -658,7 +657,7 @@ export default function Home() {
             {!loading && !error && <p className="mt-3 text-xs text-slate-400">Select a player row to open their profile.</p>}
           </div>
         </section>
-        <AdSlot placement="inline" className="mt-8" />
+        <AdSlot placement="leaderboard" className="mt-8" />
       </main>
       <SiteFooter />
 
