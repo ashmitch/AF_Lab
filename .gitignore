@@ -1,0 +1,52 @@
+﻿# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.neon
+**/.user.yml
+**/profiles.yml
+/config/
+airflow.cfg
+
+# Dependencies and build output
+node_modules/
+.next/
+out/
+build/
+coverage/
+.vercel/
+**/node_modules/
+**/.next/
+
+# Python and Airflow runtime files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+logs/
+airflow.db*
+airflow-webserver.pid
+airflow-scheduler.pid
+
+# dbt generated files
+**/target/
+**/logs/
+
+# Local data exports and runtime folders
+local_files/
+plugins/
+scripts/*_df.csv
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+*.p12
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

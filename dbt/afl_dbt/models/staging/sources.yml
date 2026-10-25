@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: fantasy_players
+      - name: afl_games
+      - name: afl_player_stats

@@ -1,0 +1,30 @@
+{{ config(materialized='table') }}
+
+select
+    id as player_id,
+    "squadId" as squad_id,
+    trim("firstName"::text) as first_name,
+    trim("lastName"::text) as last_name,
+    coalesce(nullif(trim(player_name::text), ''), concat_ws(', ', trim("lastName"::text), trim("firstName"::text))) as player_name,
+    price,
+    status,
+    position,
+    dob as date_of_birth,
+    "gamesPlayed" as games_played,
+    "averagePoints" as average_points,
+    "totalPoints" as total_points,
+    "last3Avg" as last_3_avg,
+    "last5Avg" as last_5_avg,
+    "highScore" as high_score,
+    "lowScore" as low_score,
+    "lastRoundScore" as last_round_score,
+    "roundRank" as round_rank,
+    "seasonRank" as season_rank,
+    "seasonPriceChange" as season_price_change,
+    "roundPriceChange" as round_price_change,
+    "roundPriceChangePct" as round_price_change_pct,
+    "ownership.25" as ownership_round_25,
+    afl_fantasy_squad_id::integer as afl_fantasy_squad_id,
+    team_afl_tables_matches,
+    team_afl_tables_players
+from {{ ref('stg_fantasy_players') }}
