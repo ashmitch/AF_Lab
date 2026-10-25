@@ -23,10 +23,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {`window.dataLayer = window.dataLayer || [];
 function gtag(){window.dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'G-E4900NPM44');`}
+gtag('config', 'G-N444WP91RX');`}
         </Script>
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-E4900NPM44"
+          src="https://www.googletagmanager.com/gtag/js?id=G-N444WP91RX"
           strategy="afterInteractive"
         />
       </body>
