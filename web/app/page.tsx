@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import type { CSSProperties } from "react";
+import Link from "next/link";
 import SiteFooter from "./components/SiteFooter";
 import AdSlot from "./components/AdSlot";
 
-const body = Barlow({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-const display = Barlow_Condensed({ subsets: ["latin"], weight: ["700", "800"], style: ["italic"] });
 
 type DataRow = Record<string, unknown>;
 type Section = { label: string; table: string; description: string };
@@ -16,8 +15,15 @@ const sections: Section[] = [
   { label: "Home vs Away Avg", table: "mart_home_away_averages", description: "Compare player output at home and away." },
   { label: "Win vs Loss Avg", table: "mart_win_loss_averages", description: "See how player averages change with the result." },
   { label: "Points Distribution", table: "mart_points_distribution", description: "Understand which stats contribute to each player's fantasy output." },
+  { label: "Team Averages", table: "mart_team_points_avgs", description: "Compare each team's average fantasy points by game situation and position." },
+  { label: "Team Averages Against", table: "mart_team_points_against_avgs", description: "Compare the fantasy points teams allow their opponents to score." },
   { label: "Venue Averages", table: "mart_venue_averages", description: "Compare match statistics across AFL venues." },
   { label: "Player Venue Averages", table: "mart_player_averages_by_venue", description: "Compare individual player averages by venue." },
+];
+const sectionGroups = [
+  { label: "Player Stats", tables: sections.slice(0, 4) },
+  { label: "Team Stats", tables: sections.slice(4, 6) },
+  { label: "Venue Stats", tables: sections.slice(6) },
 ];
 
 const focusRing = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2b705]";
@@ -250,59 +256,23 @@ const distributionStats = [
 ] as const;
 
 function DistributionChart({ row }: { row: DataRow | null }) {
-  const size = 340, cx = size / 2, cy = size / 2, radius = 108, maxPct = 60;
-  const values = distributionStats.map((stat) => {
-    const n = asNumber(row?.[stat.key]);
-    // Neon stores these fields as percentage values. 0.71 means 0.71%, not 71%.
-    const pct = n === null ? 0 : Math.max(0, n);
-    return { ...stat, pct };
+  const values = distributionStats.map((stat) => ({ ...stat, pct: Math.max(0, asNumber(row?.[stat.key]) ?? 0) }));
+  const colors = ["#0d2b52", "#176b87", "#2f8f9d", "#58a77a", "#9cab36", "#d6a817", "#e27b35", "#b74b52", "#7756a5"];
+  const total = values.reduce((sum, value) => sum + value.pct, 0);
+  const segments = values.map((value, index) => {
+    const start = values.slice(0, index).reduce((sum, previous) => sum + (total ? previous.pct / total * 100 : 0), 0);
+    const end = start + (total ? value.pct / total * 100 : 0);
+    return `${colors[index]} ${start}% ${end}%`;
   });
-  const point = (i: number, value: number) => {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / values.length;
-    const r = radius * Math.min(maxPct, value) / maxPct;
-    return `${cx + Math.cos(angle) * r},${cy + Math.sin(angle) * r}`;
-  };
-  const polygon = values.map((v, i) => point(i, v.pct)).join(" ");
-  const labelPoint = (i: number) => {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / values.length;
-    const r = radius + 26;
-    return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
-  };
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h3 className="font-bold text-slate-900">Fantasy points distribution</h3>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">Scale: 0–60%</span>
-      </div>
-      <p className="mb-2 text-sm text-slate-500">Each axis runs from 0% at the centre to 100% at the outer edge.</p>
-      <div className="mx-auto max-w-[420px]">
-        <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Radar chart of fantasy points distribution by statistic" className="w-full overflow-visible">
-          {[15, 30, 45, 60].map((level) => (
-            <polygon key={level} points={values.map((_, i) => point(i, level)).join(" ")} fill="none" stroke="#dbe3ee" strokeWidth="1" />
-          ))}
-          {values.map((v, i) => {
-            const p = labelPoint(i);
-            return <g key={v.key}>
-              <line x1={cx} y1={cy} x2={point(i, maxPct).split(",")[0]} y2={point(i, maxPct).split(",")[1]} stroke="#dbe3ee" strokeWidth="1" />
-              <text x={p.x} y={p.y} fontSize="9.5" textAnchor={p.x < cx - 8 ? "end" : p.x > cx + 8 ? "start" : "middle"} dominantBaseline="middle" fill="#475569">{v.label}</text>
-            </g>;
-          })}
-          <polygon points={polygon} fill="#f2b705" fillOpacity="0.25" stroke="#0d2b52" strokeWidth="2.5" strokeLinejoin="round" />
-          {values.map((v, i) => {
-            const [x, y] = point(i, v.pct).split(",").map(Number);
-            return <circle key={v.key} cx={x} cy={y} r="3.5" fill="#0d2b52" stroke="white" strokeWidth="1.5" />;
-          })}
-        </svg>
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-        {values.map((v) => (
-          <div key={v.key} className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1 text-xs">
-            <span className="text-slate-500">{v.label}</span><strong className="tabular-nums text-slate-800">{v.pct.toFixed(1)}%</strong>
-          </div>
-        ))}
-      </div>
+  return <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="mb-1 flex items-center justify-between gap-3"><h3 className="font-bold text-slate-900">Fantasy points distribution</h3><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">Positive point share</span></div>
+    <p className="mb-3 text-sm text-slate-500">Positive scoring categories make up the slices. Free kicks against are shown separately as a deduction.</p>
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-center">
+      <div role="img" aria-label="Pie chart of positive fantasy points by statistic" className="h-52 w-52 shrink-0 rounded-full border border-white shadow-inner" style={{ background: `conic-gradient(${segments.join(", ")})` }} />
+      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-2 sm:w-auto sm:grid-cols-1">{values.map((value, index) => <div key={value.key} className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: colors[index] }} /><span className="text-slate-500">{value.label}</span><strong className="ml-auto tabular-nums text-slate-800">{(total ? value.pct / total * 100 : 0).toFixed(1)}%</strong></div>)}</div>
     </div>
-  );
+    <p className="mt-3 text-xs text-slate-500">Free kicks against: {formatNumber(row?.pct_avg_from_frees_against)}% (negative contribution)</p>
+  </div>;
 }
 
 export default function Home() {
@@ -443,15 +413,51 @@ export default function Home() {
     return map;
   }, [summaryLookup]);
 
-  const columns = useMemo(() => Object.keys(data[0] ?? {}).filter((column) => !["player id", "player_id"].includes(column.toLowerCase())), [data]);
+  const hasTeamAverageBaseline = activeSection.table === "mart_team_points_avgs";
+  const tableData = data;
+  const columns = useMemo(() => Object.keys(tableData[0] ?? {}).filter((column) => !["player id", "player_id"].includes(column.toLowerCase())), [tableData]);
   const teamColumn = findColumn(columns, ["team", "team_name", "team_name_home", "player_team"]);
   const positionColumn = findColumn(columns, ["pos", "position", "player_position"]);
-  const teams = useMemo(() => teamColumn ? [...new Set(data.map((row) => normalise(row[teamColumn])).filter((v) => v && v !== "—" && v !== "-"))].sort((a,b) => a.localeCompare(b)) : [], [data, teamColumn]);
-  const positions = useMemo(() => positionColumn ? [...new Set(data.flatMap((row) => normalise(row[positionColumn]).split(",").map((v) => v.trim()).filter(Boolean)))].sort((a,b) => a.localeCompare(b)) : [], [data, positionColumn]);
+  const teams = useMemo(() => teamColumn ? [...new Set(tableData.map((row) => normalise(row[teamColumn])).filter((v) => v && v !== "—" && v !== "-"))].sort((a,b) => a.localeCompare(b)) : [], [tableData, teamColumn]);
+  const positions = useMemo(() => positionColumn ? [...new Set(tableData.flatMap((row) => normalise(row[positionColumn]).split(",").map((v) => v.trim()).filter(Boolean)))].sort((a,b) => a.localeCompare(b)) : [], [tableData, positionColumn]);
+
+  const averageBaseline = hasTeamAverageBaseline && teamColumn
+    ? tableData.find((row) => normalise(row[teamColumn]).toLowerCase().replaceAll("_", " ") === "afl average")
+    : undefined;
+  const heatmapEnabled = hasTeamAverageBaseline || activeSection.table === "mart_team_points_against_avgs";
+  const coloredColumns = columns.filter((column) => column !== teamColumn && tableData.some((row) => asNumber(row[column]) !== null));
+  const getHeatStyle = (column: string, value: unknown, row: DataRow): CSSProperties | undefined => {
+    if (!heatmapEnabled || !coloredColumns.includes(column)) return undefined;
+    if (averageBaseline && row === averageBaseline) return { backgroundColor: "#fff", color: "#0f172a" };
+    const numericValue = asNumber(value);
+    if (numericValue === null) return undefined;
+    const comparisonValues = tableData.filter((candidate) => candidate !== averageBaseline)
+      .map((candidate) => asNumber(candidate[column])).filter((candidate): candidate is number => candidate !== null);
+    if (!comparisonValues.length) return undefined;
+    if (averageBaseline) {
+      const baselineValue = asNumber(averageBaseline[column]);
+      if (baselineValue === null) return undefined;
+      const maxDelta = Math.max(...comparisonValues.map((candidate) => Math.abs(candidate - baselineValue)));
+      const delta = numericValue - baselineValue;
+      if (maxDelta === 0 || delta === 0) return { backgroundColor: "#fff", color: "#0f172a" };
+      const alpha = 0.12 + Math.abs(delta) / maxDelta * 0.48;
+      return delta > 0
+        ? { backgroundColor: `rgba(34, 197, 94, ${alpha})`, color: "#14532d" }
+        : { backgroundColor: `rgba(239, 68, 68, ${alpha})`, color: "#7f1d1d" };
+    }
+    const min = Math.min(...comparisonValues), max = Math.max(...comparisonValues);
+    if (min === max) return { backgroundColor: "#fff", color: "#0f172a" };
+    const t = (numericValue - min) / (max - min);
+    const channel = (from: number, to: number, progress: number) => Math.round(from + (to - from) * progress);
+    const red = t < 0.5 ? 255 : channel(255, 134, (t - 0.5) * 2);
+    const green = t < 0.5 ? channel(134, 255, t * 2) : 255;
+    const blue = t < 0.5 ? channel(134, 255, t * 2) : channel(255, 134, (t - 0.5) * 2);
+    return { backgroundColor: `rgb(${red}, ${green}, ${blue})`, color: "#0f172a" };
+  };
 
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = data.filter((row) => {
+    const filtered = tableData.filter((row) => {
       const id = rowPlayerId(row);
       const summary = id ? summaryById.get(id) : undefined;
       const valueFor = (keys: string[]) => {
@@ -501,7 +507,7 @@ export default function Home() {
       const comparison = compareValues(aValue, bValue);
       return sortDescending ? -comparison : comparison;
     });
-  }, [data, search, teamFilter, positionFilter, teamColumn, positionColumn, sortColumn, sortDescending,
+  }, [tableData, search, teamFilter, positionFilter, teamColumn, positionColumn, sortColumn, sortDescending,
       summaryById, minPrice, maxPrice, minAge, maxAge, dppOnly, gpOnly, excludeLowTog, activeSection.table]);
 
   function handleSort(column: string) {
@@ -521,16 +527,16 @@ export default function Home() {
   ] as const;
 
   return (
-    <div className={`${body.className} min-h-screen bg-[#f4f6fa] text-slate-900`}>
+    <div className="min-h-screen bg-[#f4f6fa] text-slate-900">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0d2b52] text-white shadow-lg shadow-slate-900/10">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-4 sm:px-7 lg:px-10">
           <button onClick={() => setActiveSection(sections[0])} className={`text-left ${focusRing}`}>
-            <span className={`${display.className} block text-4xl font-extrabold leading-none tracking-tight sm:text-5xl`}>AF<span className="text-[#f2b705]">_</span>LAB</span>
+            <span className={`block text-4xl font-extrabold leading-none tracking-tight sm:text-5xl`}>AF<span className="text-[#f2b705]">_</span>LAB</span>
             <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.18em] text-blue-100/70">AFL Fantasy Intelligence</span>
           </button>
           <nav className="flex items-center gap-4 text-sm font-semibold sm:gap-7" aria-label="Site">
             <a href="#statistics" className={`border-b-2 border-[#f2b705] py-2 text-white ${focusRing}`}>Statistics</a>
-            <a href="/policies" className={`border-b-2 border-transparent py-2 text-blue-100/70 transition hover:border-[#f2b705] hover:text-white ${focusRing}`}>Policies</a>
+            <Link href="/policies" className={`border-b-2 border-transparent py-2 text-blue-100/70 transition hover:border-[#f2b705] hover:text-white ${focusRing}`}>Policies</Link>
           </nav>
         </div>
         <div className="h-1 bg-gradient-to-r from-[#d4202c] via-[#f2b705] to-[#f2b705]" />
@@ -540,16 +546,19 @@ export default function Home() {
         <section id="statistics" className="grid gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
           <aside className="self-start rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-28">
             <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#c18d00]">AF_Lab / Data</p>
-            <h1 className={`${display.className} mb-4 text-3xl font-bold leading-none text-[#0d2b52]`}>AFL Fantasy Stats</h1>
-            <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col" aria-label="Statistics pages">
-              {sections.map((section, index) => {
+            <h1 className={`mb-4 text-3xl font-bold leading-none text-[#0d2b52]`}>AFL Fantasy Stats</h1>
+            <nav className="space-y-4" aria-label="Statistics pages">
+              {sectionGroups.map((group) => <div key={group.label}>
+                <h2 className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{group.label}</h2>
+                {group.tables.length ? <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col">{group.tables.map((section) => {
                 const active = activeSection.table === section.table;
                 return <button key={section.table} onClick={() => setActiveSection(section)} aria-current={active ? "page" : undefined}
                   className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${focusRing} ${active ? "bg-[#0d2b52] font-semibold text-white shadow-md shadow-blue-950/15" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>
-                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${active ? "bg-[#f2b705] text-[#0d2b52]" : "bg-slate-100 text-slate-500"}`}>{String(index + 1).padStart(2, "0")}</span>
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${active ? "bg-[#f2b705] text-[#0d2b52]" : "bg-slate-100 text-slate-500"}`}>{String(sections.indexOf(section) + 1).padStart(2, "0")}</span>
                   <span>{section.label}</span>
                 </button>;
-              })}
+                })}</div> : <p className="rounded-xl border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400">Coming soon</p>}
+              </div>)}
             </nav>
           </aside>
 
@@ -557,11 +566,13 @@ export default function Home() {
             <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#b18200]">Player & team analytics</p>
-                <h2 className={`${display.className} text-4xl font-bold leading-none text-[#0d2b52] sm:text-5xl`}>{activeSection.label}</h2>
+                <h2 className={`text-4xl font-bold leading-none text-[#0d2b52] sm:text-5xl`}>{activeSection.label}</h2>
                 <p className="mt-2 max-w-2xl text-sm text-slate-500">{activeSection.description}</p>
+                {activeSection.table === "mart_team_points_avgs" && <p className="mt-3 text-xs text-slate-500">Cells compare each team with the AFL Average row: above average is green, below average is red, and the AFL Average stays white.</p>}
+                {activeSection.table === "mart_team_points_against_avgs" && <div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><span>Lower</span><span className="h-3 w-36 rounded-full bg-gradient-to-r from-red-400 via-white to-green-400 ring-1 ring-slate-200" /><span>Higher</span></div>}
               </div>
               <div className="hidden rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm sm:block">
-                Select a player row to open their profile
+                {heatmapEnabled ? "Team-level averages" : "Select a player row to open their profile"}
               </div>
             </div>
 
@@ -630,7 +641,7 @@ export default function Home() {
                error ? <div className="p-8"><p className="font-semibold text-rose-700">Could not load this table.</p><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => setReloadKey((v) => v + 1)} className={`${outlineButton} mt-4`}>Try again</button></div> :
                data.length === 0 ? <p className="p-8 text-sm text-slate-500">No data available.</p> :
                <div className="max-h-[72vh] overflow-auto">
-                <table className="w-full border-collapse text-left text-sm tabular-nums">
+                <table className="data-table w-full border-collapse text-left text-sm tabular-nums">
                   <thead className="sticky top-0 z-10"><tr>{columns.map((column) => {
                     const sorted = sortColumn === column;
                     return <th key={column} aria-sort={sorted ? (sortDescending ? "descending" : "ascending") : "none"} className={`whitespace-nowrap border-b border-slate-200 p-0 font-semibold ${sorted ? "bg-amber-100 text-[#0d2b52]" : "bg-slate-50 text-slate-600"}`}>
@@ -643,7 +654,7 @@ export default function Home() {
                     const id = rowPlayerId(row);
                     const clickable = Boolean(id);
                     return <tr key={`${id ?? "row"}-${index}`} className={`border-b border-slate-100 last:border-0 odd:bg-white even:bg-slate-50/70 ${clickable ? "cursor-pointer hover:bg-amber-50" : "hover:bg-slate-50"}`} onClick={() => { if (clickable) void openPlayer(row); }}>
-                      {columns.map((column) => <td key={column} className={`whitespace-nowrap px-4 py-3 ${sortColumn === column ? "font-semibold text-[#0d2b52]" : "text-slate-700"}`}>
+                      {columns.map((column) => <td key={column} style={getHeatStyle(column, row[column], row)} className={`whitespace-nowrap px-4 py-3 ${sortColumn === column ? "font-semibold text-[#0d2b52]" : "text-slate-700"}`}>
                         {column.toLowerCase() === "player name" || column.toLowerCase() === "player" || column.toLowerCase() === "player_name"
                           ? <button onClick={(e) => { e.stopPropagation(); if (clickable) void openPlayer(row); }} className={`font-semibold text-[#0d2b52] decoration-amber-500 underline-offset-4 hover:underline ${focusRing}`}>{displayValue(row[column])}</button>
                           : formatCell(column, row[column])}
@@ -664,7 +675,7 @@ export default function Home() {
       {selectedPlayer && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-8" role="dialog" aria-modal="true" aria-label={`${rowPlayerName(selectedPlayer)} player profile`} onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedPlayer(null); }}>
         <section className="my-4 w-full max-w-5xl overflow-hidden rounded-3xl bg-[#f4f6fa] shadow-2xl">
           <header className="flex items-start justify-between gap-4 bg-[#0d2b52] px-5 py-5 text-white sm:px-8">
-            <div><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300">Player profile</p><h2 className={`${display.className} mt-1 text-4xl font-bold sm:text-5xl`}>{rowPlayerName(profileSummary ?? selectedPlayer)}</h2><p className="mt-1 text-sm text-blue-100/70">{displayValue((profileSummary ?? selectedPlayer).Team ?? (profileSummary ?? selectedPlayer).team)}{(profileSummary ?? selectedPlayer).Position || (profileSummary ?? selectedPlayer).position ? ` · ${displayValue((profileSummary ?? selectedPlayer).Position ?? (profileSummary ?? selectedPlayer).position)}` : ""}</p></div>
+            <div><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300">Player profile</p><h2 className={`mt-1 text-4xl font-bold sm:text-5xl`}>{rowPlayerName(profileSummary ?? selectedPlayer)}</h2><p className="mt-1 text-sm text-blue-100/70">{displayValue((profileSummary ?? selectedPlayer).Team ?? (profileSummary ?? selectedPlayer).team)}{(profileSummary ?? selectedPlayer).Position || (profileSummary ?? selectedPlayer).position ? ` · ${displayValue((profileSummary ?? selectedPlayer).Position ?? (profileSummary ?? selectedPlayer).position)}` : ""}</p></div>
             <button onClick={() => setSelectedPlayer(null)} className={`rounded-xl border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 ${focusRing}`} aria-label="Close player profile">✕ Close</button>
           </header>
           <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-[1fr_1.1fr]">
@@ -676,7 +687,7 @@ export default function Home() {
                    const value = profileSummary?.[key] ?? profileSummary?.[key.toLowerCase()];
                    return <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-                     <p className={`${display.className} mt-1 break-words text-2xl font-bold text-[#0d2b52]`}>{formatCell(key, value)}</p>
+                     <p className={`mt-1 break-words text-2xl font-bold text-[#0d2b52]`}>{formatCell(key, value)}</p>
                    </div>;
                  })}
                </div>}
@@ -688,14 +699,14 @@ export default function Home() {
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#b18200]">Season match log</p>
-                <h3 className={`${display.className} text-3xl font-bold text-[#0d2b52]`}>Game-by-game stats</h3>
+                <h3 className={`text-3xl font-bold text-[#0d2b52]`}>Game-by-game stats</h3>
               </div>
               <p className="text-xs text-slate-400">{profileGames.length.toLocaleString()} games</p>
             </div>
             <div className="overflow-auto rounded-2xl border border-slate-200 bg-white">
               {profileLoading ? <p className="p-5 text-sm text-slate-500">Loading match log…</p> :
                 profileGames.length === 0 ? <p className="p-5 text-sm text-slate-500">No match-level stats found for this player.</p> :
-                <table className="w-full border-collapse text-left text-sm tabular-nums">
+                <table className="data-table w-full border-collapse text-left text-sm tabular-nums">
                   <thead><tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     {["Round", "Opponent", "Venue", "Fantasy Score", "TOG"].map((heading) => <th key={heading} className="whitespace-nowrap border-b border-slate-200 px-4 py-3 font-bold">{heading}</th>)}
                   </tr></thead>

@@ -4,7 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 
 const siteFont = Barlow({
-  variable: "--font-geist-sans",
+  variable: "--font-barlow",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });

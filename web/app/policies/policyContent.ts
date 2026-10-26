@@ -1,4 +1,4 @@
-export type PolicySection = { heading: string; paragraphs: string[]; bullets?: string[] };
+export type PolicySection = { heading: string; paragraphs?: string[]; bullets?: string[] };
 
 export const policies: Record<string, { title: string; summary: string; updated: string; draft: boolean; sections: PolicySection[] }> = {
   privacy: {
