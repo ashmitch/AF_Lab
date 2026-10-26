@@ -13,17 +13,19 @@ type Section = { label: string; table: string; description: string };
 const sections: Section[] = [
   { label: "Player Summary", table: "player_summary", description: "The key numbers for every player, in one place." },
   { label: "Home vs Away Avg", table: "mart_home_away_averages", description: "Compare player output at home and away." },
-  { label: "Win vs Loss Avg", table: "mart_win_loss_averages", description: "See how player averages change with the result." },
+  { label: "Win vs Loss Avg", table: "mart_win_loss_averages", description: "Compare player averages across results and winning or losing margins." },
   { label: "Points Distribution", table: "mart_points_distribution", description: "Understand which stats contribute to each player's fantasy output." },
+  { label: "Position Averages by Result", table: "mart_position_averages_by_result", description: "Compare average position scores across match result categories." },
   { label: "Team Averages", table: "mart_team_points_avgs", description: "Compare each team's average fantasy points by game situation and position." },
   { label: "Team Averages Against", table: "mart_team_points_against_avgs", description: "Compare the fantasy points teams allow their opponents to score." },
+  { label: "Team Averages by Result", table: "mart_team_position_averages_by_result", description: "Compare each team's position scores by winning or losing margin." },
   { label: "Venue Averages", table: "mart_venue_averages", description: "Compare match statistics across AFL venues." },
   { label: "Player Venue Averages", table: "mart_player_averages_by_venue", description: "Compare individual player averages by venue." },
 ];
 const sectionGroups = [
-  { label: "Player Stats", tables: sections.slice(0, 4) },
-  { label: "Team Stats", tables: sections.slice(4, 6) },
-  { label: "Venue Stats", tables: sections.slice(6) },
+  { label: "Player Stats", tables: sections.slice(0, 5) },
+  { label: "Team Stats", tables: sections.slice(5, 8) },
+  { label: "Venue Stats", tables: sections.slice(8) },
 ];
 
 const focusRing = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2b705]";
@@ -413,7 +415,7 @@ export default function Home() {
     return map;
   }, [summaryLookup]);
 
-  const hasTeamAverageBaseline = activeSection.table === "mart_team_points_avgs";
+  const hasTeamAverageBaseline = ["mart_team_points_avgs", "mart_team_position_averages_by_result"].includes(activeSection.table);
   const tableData = data;
   const columns = useMemo(() => Object.keys(tableData[0] ?? {}).filter((column) => !["player id", "player_id"].includes(column.toLowerCase())), [tableData]);
   const teamColumn = findColumn(columns, ["team", "team_name", "team_name_home", "player_team"]);
@@ -424,13 +426,36 @@ export default function Home() {
   const averageBaseline = hasTeamAverageBaseline && teamColumn
     ? tableData.find((row) => normalise(row[teamColumn]).toLowerCase().replaceAll("_", " ") === "afl average")
     : undefined;
-  const heatmapEnabled = hasTeamAverageBaseline || activeSection.table === "mart_team_points_against_avgs";
-  const coloredColumns = columns.filter((column) => column !== teamColumn && tableData.some((row) => asNumber(row[column]) !== null));
+  const isTeamAgainstPage = activeSection.table === "mart_team_points_against_avgs";
+  const isTeamResultPage = activeSection.table === "mart_team_position_averages_by_result";
+  const isPositionResultPage = activeSection.table === "mart_position_averages_by_result";
+  const isVenueAveragePage = activeSection.table === "mart_venue_averages";
+  const isPlayerVenuePage = activeSection.table === "mart_player_averages_by_venue";
+  const showPlayerFilters = !["mart_team_points_avgs", "mart_team_points_against_avgs", "mart_team_position_averages_by_result", "mart_position_averages_by_result", "mart_venue_averages"].includes(activeSection.table);
+  const heatmapEnabled = hasTeamAverageBaseline || isTeamAgainstPage || isVenueAveragePage || isPlayerVenuePage || isPositionResultPage;
+  const coloredColumns = columns.filter((column) => {
+    if (column === teamColumn) return false;
+    if (isVenueAveragePage && column.toLowerCase() === "team_matches") return false;
+    if (isPlayerVenuePage && !column.toLowerCase().endsWith("_avg")) return false;
+    return tableData.some((row) => asNumber(row[column]) !== null);
+  });
   const getHeatStyle = (column: string, value: unknown, row: DataRow): CSSProperties | undefined => {
     if (!heatmapEnabled || !coloredColumns.includes(column)) return undefined;
     if (averageBaseline && row === averageBaseline) return { backgroundColor: "#fff", color: "#0f172a" };
     const numericValue = asNumber(value);
     if (numericValue === null) return undefined;
+    if (isPlayerVenuePage) {
+      const rowValues = coloredColumns.map((key) => asNumber(row[key])).filter((candidate): candidate is number => candidate !== null);
+      const playerAverage = average(rowValues);
+      if (playerAverage === null) return undefined;
+      const delta = numericValue - playerAverage;
+      const maxDelta = Math.max(...rowValues.map((candidate) => Math.abs(candidate - playerAverage)));
+      if (maxDelta === 0 || delta === 0) return { backgroundColor: "#fff", color: "#0f172a" };
+      const alpha = 0.12 + Math.abs(delta) / maxDelta * 0.48;
+      return delta > 0
+        ? { backgroundColor: `rgba(34, 197, 94, ${alpha})`, color: "#14532d" }
+        : { backgroundColor: `rgba(239, 68, 68, ${alpha})`, color: "#7f1d1d" };
+    }
     const comparisonValues = tableData.filter((candidate) => candidate !== averageBaseline)
       .map((candidate) => asNumber(candidate[column])).filter((candidate): candidate is number => candidate !== null);
     if (!comparisonValues.length) return undefined;
@@ -479,17 +504,17 @@ export default function Home() {
       const age = asNumber(valueFor(["Age", "age"]));
       const games = asNumber(valueFor(["Games Played", "games_played"]));
       const dppPositions = normalise(valueFor(["Position", "position", "pos"])).split(/[,/|+]/).map((v) => v.trim()).filter(Boolean);
-      const matchesMinPrice = minPrice === "" || (price !== null && price >= Number(minPrice));
-      const matchesMaxPrice = maxPrice === "" || (price !== null && price <= Number(maxPrice));
-      const matchesMinAge = minAge === "" || (age !== null && age >= Number(minAge));
-      const matchesMaxAge = maxAge === "" || (age !== null && age <= Number(maxAge));
-      const matchesDpp = !dppOnly || dppPositions.length >= 2;
-      const matchesGp = !gpOnly || (games !== null && games > 0);
+      const matchesMinPrice = !showPlayerFilters || minPrice === "" || (price !== null && price >= Number(minPrice));
+      const matchesMaxPrice = !showPlayerFilters || maxPrice === "" || (price !== null && price <= Number(maxPrice));
+      const matchesMinAge = !showPlayerFilters || minAge === "" || (age !== null && age >= Number(minAge));
+      const matchesMaxAge = !showPlayerFilters || maxAge === "" || (age !== null && age <= Number(maxAge));
+      const matchesDpp = !showPlayerFilters || !dppOnly || dppPositions.length >= 2;
+      const matchesGp = !showPlayerFilters || !gpOnly || (games !== null && games > 0);
 
       // TOG-exclusion is currently meaningful on the Player Summary, where Neon provides
       // a precomputed average excluding games with TOG < 50. Other marts are pre-aggregated.
       const adjustedAvg = asNumber(valueFor(["Season Avg Fantasy (TOG Adjusted)"]));
-      const matchesTog = !excludeLowTog || activeSection.table !== "player_summary" || adjustedAvg !== null;
+      const matchesTog = !showPlayerFilters || !excludeLowTog || activeSection.table !== "player_summary" || adjustedAvg !== null;
 
       return matchesSearch && matchesTeam && matchesPosition && matchesMinPrice && matchesMaxPrice &&
         matchesMinAge && matchesMaxAge && matchesDpp && matchesGp && matchesTog;
@@ -508,7 +533,7 @@ export default function Home() {
       return sortDescending ? -comparison : comparison;
     });
   }, [tableData, search, teamFilter, positionFilter, teamColumn, positionColumn, sortColumn, sortDescending,
-      summaryById, minPrice, maxPrice, minAge, maxAge, dppOnly, gpOnly, excludeLowTog, activeSection.table]);
+    summaryById, minPrice, maxPrice, minAge, maxAge, dppOnly, gpOnly, excludeLowTog, activeSection.table, showPlayerFilters]);
 
   function handleSort(column: string) {
     if (sortColumn === column) setSortDescending((current) => !current);
@@ -553,8 +578,7 @@ export default function Home() {
                 {group.tables.length ? <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col">{group.tables.map((section) => {
                 const active = activeSection.table === section.table;
                 return <button key={section.table} onClick={() => setActiveSection(section)} aria-current={active ? "page" : undefined}
-                  className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${focusRing} ${active ? "bg-[#0d2b52] font-semibold text-white shadow-md shadow-blue-950/15" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>
-                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${active ? "bg-[#f2b705] text-[#0d2b52]" : "bg-slate-100 text-slate-500"}`}>{String(sections.indexOf(section) + 1).padStart(2, "0")}</span>
+                  className={`flex shrink-0 items-center rounded-xl px-3 py-3 text-left text-sm transition ${focusRing} ${active ? "bg-[#0d2b52] font-semibold text-white shadow-md shadow-blue-950/15" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>
                   <span>{section.label}</span>
                 </button>;
                 })}</div> : <p className="rounded-xl border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400">Coming soon</p>}
@@ -568,11 +592,13 @@ export default function Home() {
                 <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#b18200]">Player & team analytics</p>
                 <h2 className={`text-4xl font-bold leading-none text-[#0d2b52] sm:text-5xl`}>{activeSection.label}</h2>
                 <p className="mt-2 max-w-2xl text-sm text-slate-500">{activeSection.description}</p>
-                {activeSection.table === "mart_team_points_avgs" && <p className="mt-3 text-xs text-slate-500">Cells compare each team with the AFL Average row: above average is green, below average is red, and the AFL Average stays white.</p>}
-                {activeSection.table === "mart_team_points_against_avgs" && <div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><span>Lower</span><span className="h-3 w-36 rounded-full bg-gradient-to-r from-red-400 via-white to-green-400 ring-1 ring-slate-200" /><span>Higher</span></div>}
+                {hasTeamAverageBaseline && averageBaseline && <p className="mt-3 text-xs text-slate-500">Cells compare each team with the AFL Average row: above average is green, below average is red, and the AFL Average stays white.</p>}
+                {(isTeamAgainstPage || isVenueAveragePage || isPositionResultPage || (isTeamResultPage && !averageBaseline)) && <div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><span>Lower</span><span className="h-3 w-36 rounded-full bg-gradient-to-r from-red-400 via-white to-green-400 ring-1 ring-slate-200" /><span>Higher</span></div>}
+                {isTeamResultPage && averageBaseline && <p className="mt-3 text-xs text-slate-500">Cells compare each team with the AFL Average row; the AFL Average stays white.</p>}
+                {isPlayerVenuePage && <div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><span>Below player&apos;s venue average</span><span className="h-3 w-36 rounded-full bg-gradient-to-r from-red-400 via-white to-green-400 ring-1 ring-slate-200" /><span>Above</span></div>}
               </div>
               <div className="hidden rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm sm:block">
-                {heatmapEnabled ? "Team-level averages" : "Select a player row to open their profile"}
+                {hasTeamAverageBaseline || isTeamAgainstPage || isTeamResultPage ? "Team-level averages" : isVenueAveragePage || isPlayerVenuePage ? "Venue comparisons" : isPositionResultPage ? "Position averages by result" : "Select a player row to open their profile"}
               </div>
             </div>
 
@@ -596,7 +622,7 @@ export default function Home() {
               {sortColumn && <button onClick={() => { setSortColumn(""); setSortDescending(true); }} className={`${outlineButton} ml-auto`}>Clear sorting</button>}
             </div>
 
-            <details open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)} className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {showPlayerFilters && <details open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)} className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-semibold text-[#0d2b52] hover:bg-slate-50">
                 <span className="flex items-center gap-2"><span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-[#0d2b52]">☷</span> Filters</span>
                 <span className="text-xs font-medium text-slate-400">{filtersOpen ? "Hide filters −" : "Show filters +"}</span>
@@ -634,7 +660,7 @@ export default function Home() {
                   <button type="button" onClick={() => { setMinPrice(""); setMaxPrice(""); setMinAge(""); setMaxAge(""); setDppOnly(false); setGpOnly(false); setExcludeLowTog(false); }} className={outlineButton}>Clear all filters</button>
                 </div>
               </div>
-            </details>
+            </details>}
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               {loading ? <p className="p-8 text-sm text-slate-500">Loading statistics…</p> :
@@ -665,7 +691,7 @@ export default function Home() {
                 {filteredData.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No rows match your filters.</p>}
                </div>}
             </div>
-            {!loading && !error && <p className="mt-3 text-xs text-slate-400">Select a player row to open their profile.</p>}
+            {!loading && !error && !isVenueAveragePage && <p className="mt-3 text-xs text-slate-400">Select a player row to open their profile.</p>}
           </div>
         </section>
         <AdSlot placement="leaderboard" className="mt-8" />

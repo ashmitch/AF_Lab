@@ -11,6 +11,8 @@ const allowedTables = [
   "mart_player_averages_by_venue",
   "mart_team_points_avgs",
   "mart_team_points_against_avgs",
+  "mart_position_averages_by_result",
+  "mart_team_position_averages_by_result",
   "fct_player_stats",
   "fct_game_stats",
   "dim_players",
@@ -58,6 +60,12 @@ export async function GET(request: Request) {
         break;
       case "mart_team_points_against_avgs":
         rows = await sql`SELECT * FROM analytics.mart_team_points_against_avgs`;
+        break;
+      case "mart_position_averages_by_result":
+        rows = await sql`SELECT result_category, "DEF_Avg", "MID_Avg", "FWD_Avg", "RUC_Avg" FROM analytics.mart_position_averages_by_result ORDER BY category_order`;
+        break;
+      case "mart_team_position_averages_by_result":
+        rows = await sql`SELECT * FROM analytics.mart_team_position_averages_by_result`;
         break;
       case "mart_points_distribution":
         rows = await sql`SELECT * FROM analytics.mart_points_distribution`;
